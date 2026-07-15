@@ -31,7 +31,7 @@ region_codes = [
     "YE", "ZW"
 ]
 
-# অ্যান্ড্রয়েড অ্যাপের ৫টি ক্যাটাগরি (টোকেন বাঁচাতে 'all' এর জন্য আলাদা রিকোয়েস্ট পাঠানো লাগবে না)
+# অ্যান্ড্রয়েড অ্যাপের ৫টি ক্যাটাগরি
 category_map = {
     "comedy": "23",
     "song": "10",
@@ -48,7 +48,7 @@ def fetch_videos(youtube_client, region, cat_id):
         chart="mostPopular",
         regionCode=region,
         videoCategoryId=cat_id,
-        maxResults=10
+        maxResults=25 # <--- এখানে ২৫টি ভিডিও সেট করা হয়েছে
     )
     response = request.execute()
     
@@ -68,10 +68,9 @@ def fetch_videos(youtube_client, region, cat_id):
 
 # দেশগুলোকে ২০টি করে গ্রুপে ভাগ করে লুপ চালানো
 for i, region in enumerate(region_codes):
-    # ইনডেক্স অনুযায়ী কোন API Key ব্যবহার হবে তা নির্ধারণ (প্রতি ২০টি দেশের জন্য ১টি করে চাবি পরিবর্তন)
+    # ইনডেক্স অনুযায়ী কোন API Key ব্যবহার হবে তা নির্ধারণ
     key_index = i // 20
     
-    # যদি ১০৪টি দেশের কারণে ভাগফল ৫ বা তার বেশি হয়, তবে শেষ চাবিটি (Index 4) ব্যবহার হবে
     if key_index >= len(API_KEYS):
         key_index = len(API_KEYS) - 1
         
@@ -94,4 +93,4 @@ for i, region in enumerate(region_codes):
 with open("videos.json", "w", encoding="utf-8") as f:
     json.dump(final_data, f, indent=4, ensure_ascii=False)
 
-print("✅ Static partitioned videos.json generated successfully and securely!")
+print("✅ Videos.json generated successfully with 25 videos per category!")
