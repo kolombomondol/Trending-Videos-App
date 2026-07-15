@@ -2,24 +2,28 @@ name: Auto Fetch Trending Videos
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টা পর পর এটি অটোমেটিক রান হবে
-  workflow_dispatch: # Actions ট্যাব থেকে ম্যানুয়ালি রান করার অপশন
+    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টা পর পর অটো রান হবে
+  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+
+permissions:
+  contents: write # গিটহাবে ফাইল পুশ করার পারমিশন
 
 jobs:
-  build:
+  update-json: # আপনার জবের নামের সাথে মিল রাখা হলো
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # লেটেস্ট ভার্সন ব্যবহার করা হয়েছে
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # লেটেস্ট ভার্সন ব্যবহার করা হয়েছে
         with:
-          python-version: '3.x'
+          python-version: '3.10'
 
       - name: Install Dependencies
         run: |
+          pip install --upgrade pip
           pip install google-api-python-client
 
       - name: Run Python Script
@@ -29,7 +33,7 @@ jobs:
           API_KEY_3: ${{ secrets.API_KEY_3 }}
           API_KEY_4: ${{ secrets.API_KEY_4 }}
           API_KEY_5: ${{ secrets.API_KEY_5 }}
-        run: python fetch_videos.py
+        run: python fetch_videos.py # আপনার পাইথন স্ক্রিপ্ট রান হবে
 
       - name: Commit and Push Changes
         run: |
