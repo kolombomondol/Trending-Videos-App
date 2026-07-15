@@ -1,83 +1,74 @@
-import os
 import json
-import urllib.request
-import urllib.parse
+import os
+from googleapiclient.discovery import build
 
-# ২০টি দেশ এবং তাদের ক্যাটাগরি ম্যাপিং
-countries = {
-    "US": "United States", "BD": "Bangladesh", "IN": "India", "GB": "United Kingdom", 
-    "SA": "Saudi Arabia", "AE": "UAE", "PK": "Pakistan", "CA": "Canada", 
-    "AU": "Australia", "DE": "Germany", "FR": "France", "JP": "Japan", 
-    "KR": "South Korea", "ID": "Indonesia", "NG": "Nigeria", "MY": "Malaysia", 
-    "SG": "Singapore", "TR": "Turkey", "IT": "Italy", "ES": "Spain"
-}
+# আপনার ইউটিউব এপিআই কি (Google Cloud Console থেকে আনুন)
+API_KEY = "YOUR_YOUTUBE_API_KEY_HERE"
+youtube = build("youtube", "v3", developerKey=API_KEY)
 
-# ক্যাটাগরি আইডি (সব দেশেই এগুলো সাধারণত সেম থাকে)
-# "" = All, "23" = Comedy, "10" = Music, "25" = News, "17" = Sports, "22" = Vlog
-categories = {
-    "all": "",
+# ১০৪টি দেশের কোড লিস্ট
+region_codes = [
+    "US", "BD", "IN", "GB", "SA", "AE", "PK", "CA", "AU", "DE", "FR", "JP", "KR",
+    "ID", "NG", "MY", "SG", "TR", "IT", "ES", "DZ", "AR", "AT", "AZ", "BH", "BY", 
+    "BE", "BO", "BA", "BR", "BG", "CL", "CO", "CR", "HR", "CY", "CZ", "DK", "DO",
+    "EC", "EG", "SV", "EE", "FI", "GE", "GH", "GR", "GT", "HN", "HK", "HU", "IS", 
+    "IQ", "IE", "IL", "JM", "JO", "KZ", "KE", "KW", "LV", "LB", "LY", "LI", "LT", 
+    "LU", "MK", "MT", "MX", "ME", "MA", "NP", "NL", "NZ", "NI", "NO", "OM", "PA", 
+    "PG", "PY", "PE", "PH", "POL", "PT", "QA", "RO", "RU", "SN", "RS", "SK", "SI", 
+    "ZA", "LK", "SE", "CH", "TW", "TZ", "TH", "TN", "UG", "UA", "UY", "VE", "VN", 
+    "YE", "ZW"
+]
+
+# ইউটিউব ক্যাটাগরি ম্যাপিং
+# "all" এর জন্য কোনো আইডি লাগে না, শুধু chart="mostPopular"
+category_map = {
+    "all": None,
     "comedy": "23",
-    "music": "10",
+    "song": "10",
     "news": "25",
     "sports": "17",
     "vlog": "22"
 }
 
-# GitHub Secrets থেকে API Key রিড করা হবে
-API_KEY = os.environ.get("YOUTUBE_API_KEY")
+final_data = {}
 
-def fetch_videos_for_country_and_category(region_code, category_id, limit=30):
-    """একটি নির্দিষ্ট দেশ এবং ক্যাটাগরির জন্য ভিডিও ফেচ করে"""
-    category_param = f"&videoCategoryId={category_id}" if category_id else ""
-    url = (
-        f"https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular"
-        f"&regionCode={region_code}{category_param}&maxResults={limit}&key={API_KEY}"
+def fetch_videos(region, cat_id):
+    request = youtube.videos().list(
+        part="snippet,statistics",
+        chart="mostPopular",
+        regionCode=region,
+        videoCategoryId=cat_id,
+        maxResults=10
     )
+    response = request.execute()
     
-    try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req) as response:
-            data = json.loads(response.read().decode())
-            video_list = []
-            for item in data.get("items", []):
-                snippet = item.get("snippet", {})
-                stats = item.get("statistics", {})
-                
-                video_list.append({
-                    "id": item.get("id", ""),
-                    "title": snippet.get("title", "No Title"),
-                    "channelTitle": snippet.get("channelTitle", "Unknown"),
-                    "thumbnailUrl": snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
-                    "viewCount": stats.get("viewCount", "0"),
-                    "publishedAt": snippet.get("publishedAt", "")
-                })
-            return video_list
-    except Exception as e:
-        print(f"Error fetching data for {region_code} (Category: {category_id}): {e}")
-        return []
+    videos = []
+    for item in response.get("items", []):
+        snippet = item["snippet"]
+        stats = item["statistics"]
+        videos.append({
+            "id": item["id"],
+            "title": snippet["title"],
+            "channelTitle": snippet["channelTitle"],
+            "thumbnailUrl": snippet["thumbnails"]["high"]["url"],
+            "viewCount": stats.get("viewCount", "0"),
+            "publishedAt": snippet["publishedAt"]
+        })
+    return videos
 
-def main():
-    if not API_KEY:
-        print("API Key not found in Environment Variables!")
-        return
+# মূল লুপ
+for region in region_codes:
+    print(f"Processing: {region}...")
+    final_data[region] = {}
+    for cat_name, cat_id in category_map.items():
+        try:
+            final_data[region][cat_name] = fetch_videos(region, cat_id)
+        except Exception as e:
+            print(f"Error fetching {cat_name} for {region}: {e}")
+            final_data[region][cat_name] = []
 
-    # ফাইনাল স্ট্রাকচার: {"US": {"all": [...], "music": [...]}, "BD": {...}}
-    final_data = {}
+# JSON ফাইলে সেভ করা
+with open("videos.json", "w", encoding="utf-8") as f:
+    json.dump(final_data, f, indent=4, ensure_ascii=False)
 
-    for region_code in countries.keys():
-        print(f"Fetching videos for {region_code}...")
-        final_data[region_code] = {}
-        
-        for cat_name, cat_id in categories.items():
-            # All ক্যাটাগরির জন্য আমরা ৫০টি নিচ্ছি, বাকিগুলোর জন্য ২৫টি করে নিচ্ছি
-            limit = 50 if cat_name == "all" else 25
-            videos = fetch_videos_for_country_and_category(region_code, cat_id, limit)
-            final_data[region_code][cat_name] = videos
-
-    # videos.json ফাইলে রাইট করা
-    with open("videos.json", "w", encoding="utf-8") as f:
-        json.dump(final_data, f, ensure_ascii=False, indent=2)
-    print("videos.json file successfully updated!")
-
-if __name__ == "__main__":
-    main()
+print("videos.json generated successfully!")
