@@ -1,0 +1,36 @@
+name: Daily YouTube Video Update
+
+on:
+  schedule:
+    # প্রতিদিন বাংলাদেশ সময় বেলা ১২:০০ টায় (GMT 6:00 AM) এই স্ক্রিপ্টটি স্বয়ংক্রিয়ভাবে রান হবে
+    - cron: '0 6 * * *'
+  workflow_dispatch: # এর মাধ্যমে আপনি যেকোনো সময় ম্যানুয়ালিও রান করতে পারবেন
+
+permissions:
+  contents: write # গিটহাবে ফাইল রাইট বা আপডেট করার পারমিশন
+
+jobs:
+  update-json:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Run Python Script to Fetch Videos
+      env:
+        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      run: python fetch_videos.py
+
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add videos.json
+        git diff-index --quiet HEAD || git commit -m "Auto-update viral videos JSON"
+        git push
