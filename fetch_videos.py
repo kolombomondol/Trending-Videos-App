@@ -2,19 +2,21 @@ import json
 import os
 from googleapiclient.discovery import build
 
-# আপনার ৫টি ভিন্ন ভিন্ন এপিআই কি এখানে বসান
+# গিটহাব সিক্রেট (Environment Variables) থেকে ৫টি এপিআই কি লোড করা হচ্ছে
 API_KEYS = [
-    "AIzaSyCMupxt2iqOpClzlubti-6lpIKmFh2pZmY", 
- # ১ম ২০টি দেশের জন্য
-    "AIzaSyCL-wjhJ8a105xQmTZdsgQ4VQxn9RWKUR0",  
-# ২য় ২০টি দেশের জন্য
-    "AIzaSyDa83kAFLcf-pwvzsaBDmiFPN34GHMQv7w", 
- # ৩য় ২০টি দেশের জন্য
-    "AIzaSyCESGAh7Ya5s8CHd6XmZZ__LCT1g2fIw50",  
-# ৪থ ২০টি দেশের জন্য
-    "AIzaSyBD6fv3hSW61zgAa_yWINRLRQn5BrsLVO4"   
-# বাকি ২৪টি দেশের জন্য
+    os.environ.get("API_KEY_1"),
+    os.environ.get("API_KEY_2"),
+    os.environ.get("API_KEY_3"),
+    os.environ.get("API_KEY_4"),
+    os.environ.get("API_KEY_5")
 ]
+
+# খালি বা নাল (None) কীগুলো ফিল্টার করে বাদ দেওয়া হচ্ছে
+API_KEYS = [key for key in API_KEYS if key]
+
+# যদি একটি কী-ও খুঁজে না পাওয়া যায় তবে স্ক্রিপ্ট বন্ধ হয়ে সতর্ক করবে
+if not API_KEYS:
+    raise ValueError("❌ Error: No API Keys found in Environment Variables! Please check GitHub Secrets.")
 
 # ১০৪টি দেশের কোড লিস্ট
 region_codes = [
@@ -29,7 +31,7 @@ region_codes = [
     "YE", "ZW"
 ]
 
-# অল বাদে ৫টি ক্যাটাগরি
+# অ্যান্ড্রয়েড অ্যাপের ৫টি ক্যাটাগরি (টোকেন বাঁচাতে 'all' এর জন্য আলাদা রিকোয়েস্ট পাঠানো লাগবে না)
 category_map = {
     "comedy": "23",
     "song": "10",
@@ -78,7 +80,7 @@ for i, region in enumerate(region_codes):
     # বর্তমান চাবি দিয়ে ইউটিউব ক্লায়েন্ট তৈরি
     youtube = build("youtube", "v3", developerKey=current_key)
     
-    print(f"Processing Country {i+1}: {region} using API Key Index: {key_index}")
+    print(f"Processing Country {i+1}/{len(region_codes)}: {region} using API Key Index: {key_index}")
     final_data[region] = {}
     
     for cat_name, cat_id in category_map.items():
@@ -88,8 +90,8 @@ for i, region in enumerate(region_codes):
             print(f"⚠️ Error fetching {cat_name} for {region} using Key Index {key_index}: {e}")
             final_data[region][cat_name] = []
 
-# JSON ফাইলে সেভ করা
+# JSON ফাইলে ডেটা সেভ করা
 with open("videos.json", "w", encoding="utf-8") as f:
     json.dump(final_data, f, indent=4, ensure_ascii=False)
 
-print("✅ Static partitioned videos.json generated successfully!")
+print("✅ Static partitioned videos.json generated successfully and securely!")
