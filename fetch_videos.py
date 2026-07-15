@@ -3,7 +3,7 @@ import os
 from googleapiclient.discovery import build
 
 # আপনার ইউটিউব এপিআই কি (Google Cloud Console থেকে আনুন)
-API_KEY = "YOUR_YOUTUBE_API_KEY_HERE"
+API_KEY = "AIzaSyCMupxt2iqOpClzlubti-6lpIKmFh2pZmY"
 youtube = build("youtube", "v3", developerKey=API_KEY)
 
 # ১০৪টি দেশের কোড লিস্ট
