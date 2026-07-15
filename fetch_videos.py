@@ -2,9 +2,19 @@ import json
 import os
 from googleapiclient.discovery import build
 
-# আপনার ইউটিউব এপিআই কি (Google Cloud Console থেকে আনুন)
-API_KEY = "AIzaSyCMupxt2iqOpClzlubti-6lpIKmFh2pZmY"
-youtube = build("youtube", "v3", developerKey=API_KEY)
+# আপনার ৫টি ভিন্ন ভিন্ন এপিআই কি এখানে বসান
+API_KEYS = [
+    "AIzaSyCMupxt2iqOpClzlubti-6lpIKmFh2pZmY", 
+ # ১ম ২০টি দেশের জন্য
+    "AIzaSyCL-wjhJ8a105xQmTZdsgQ4VQxn9RWKUR0",  
+# ২য় ২০টি দেশের জন্য
+    "AIzaSyDa83kAFLcf-pwvzsaBDmiFPN34GHMQv7w", 
+ # ৩য় ২০টি দেশের জন্য
+    "AIzaSyCESGAh7Ya5s8CHd6XmZZ__LCT1g2fIw50",  
+# ৪থ ২০টি দেশের জন্য
+    "AIzaSyBD6fv3hSW61zgAa_yWINRLRQn5BrsLVO4"   
+# বাকি ২৪টি দেশের জন্য
+]
 
 # ১০৪টি দেশের কোড লিস্ট
 region_codes = [
@@ -19,10 +29,8 @@ region_codes = [
     "YE", "ZW"
 ]
 
-# ইউটিউব ক্যাটাগরি ম্যাপিং
-# "all" এর জন্য কোনো আইডি লাগে না, শুধু chart="mostPopular"
+# অল বাদে ৫টি ক্যাটাগরি
 category_map = {
-    "all": None,
     "comedy": "23",
     "song": "10",
     "news": "25",
@@ -32,8 +40,8 @@ category_map = {
 
 final_data = {}
 
-def fetch_videos(region, cat_id):
-    request = youtube.videos().list(
+def fetch_videos(youtube_client, region, cat_id):
+    request = youtube_client.videos().list(
         part="snippet,statistics",
         chart="mostPopular",
         regionCode=region,
@@ -56,19 +64,32 @@ def fetch_videos(region, cat_id):
         })
     return videos
 
-# মূল লুপ
-for region in region_codes:
-    print(f"Processing: {region}...")
+# দেশগুলোকে ২০টি করে গ্রুপে ভাগ করে লুপ চালানো
+for i, region in enumerate(region_codes):
+    # ইনডেক্স অনুযায়ী কোন API Key ব্যবহার হবে তা নির্ধারণ (প্রতি ২০টি দেশের জন্য ১টি করে চাবি পরিবর্তন)
+    key_index = i // 20
+    
+    # যদি ১০৪টি দেশের কারণে ভাগফল ৫ বা তার বেশি হয়, তবে শেষ চাবিটি (Index 4) ব্যবহার হবে
+    if key_index >= len(API_KEYS):
+        key_index = len(API_KEYS) - 1
+        
+    current_key = API_KEYS[key_index]
+    
+    # বর্তমান চাবি দিয়ে ইউটিউব ক্লায়েন্ট তৈরি
+    youtube = build("youtube", "v3", developerKey=current_key)
+    
+    print(f"Processing Country {i+1}: {region} using API Key Index: {key_index}")
     final_data[region] = {}
+    
     for cat_name, cat_id in category_map.items():
         try:
-            final_data[region][cat_name] = fetch_videos(region, cat_id)
+            final_data[region][cat_name] = fetch_videos(youtube, region, cat_id)
         except Exception as e:
-            print(f"Error fetching {cat_name} for {region}: {e}")
+            print(f"⚠️ Error fetching {cat_name} for {region} using Key Index {key_index}: {e}")
             final_data[region][cat_name] = []
 
 # JSON ফাইলে সেভ করা
 with open("videos.json", "w", encoding="utf-8") as f:
     json.dump(final_data, f, indent=4, ensure_ascii=False)
 
-print("videos.json generated successfully!")
+print("✅ Static partitioned videos.json generated successfully!")
