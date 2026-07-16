@@ -6,25 +6,25 @@ on:
   workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
 
 permissions:
-  contents: write # গিটহাবে ফাইল পুশ করার পারমিশন
+  contents: write
 
 jobs:
-  update-json: # আপনার জবের নামের সাথে মিল রাখা হলো
+  update-json:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository Code
-        uses: actions/checkout@v4 # লেটেস্ট ভার্সন ব্যবহার করা হয়েছে
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # লেটেস্ট ভার্সন ব্যবহার করা হয়েছে
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install google-api-python-client
+          pip install google-api-python-client firebase-admin
 
       - name: Run Python Script
         env:
@@ -33,7 +33,8 @@ jobs:
           API_KEY_3: ${{ secrets.API_KEY_3 }}
           API_KEY_4: ${{ secrets.API_KEY_4 }}
           API_KEY_5: ${{ secrets.API_KEY_5 }}
-        run: python fetch_videos.py # আপনার পাইথন স্ক্রিপ্ট রান হবে
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: python fetch_videos.py
 
       - name: Commit and Push Changes
         run: |
