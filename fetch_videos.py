@@ -1,6 +1,8 @@
 import json
 import os
 from googleapiclient.discovery import build
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 # গিটহাব সিক্রেট (Environment Variables) থেকে ৫টি এপিআই কি লোড করা হচ্ছে
 API_KEYS = [
@@ -41,14 +43,16 @@ category_map = {
 }
 
 final_data = {}
+total_videos_fetched = 0  # মোট ভাইরাল ভিডিওর সংখ্যা গণনার জন্য
 
 def fetch_videos(youtube_client, region, cat_id):
+    global total_videos_fetched
     request = youtube_client.videos().list(
         part="snippet,statistics",
         chart="mostPopular",
         regionCode=region,
         videoCategoryId=cat_id,
-        maxResults=25 # <--- এখানে ২৫টি ভিডিও সেট করা হয়েছে
+        maxResults=25  # ২৫টি করে ভিডিও আসবে
     )
     response = request.execute()
     
@@ -64,33 +68,53 @@ def fetch_videos(youtube_client, region, cat_id):
             "viewCount": stats.get("viewCount", "0"),
             "publishedAt": snippet["publishedAt"]
         })
+        total_videos_fetched += 1  # প্রতিটি সফল ভিডিওর জন্য ১ যোগ হবে
     return videos
 
 # দেশগুলোকে ২০টি করে গ্রুপে ভাগ করে লুপ চালানো
 for i, region in enumerate(region_codes):
-    # ইনডেক্স অনুযায়ী কোন API Key ব্যবহার হবে তা নির্ধারণ
     key_index = i // 20
-    
     if key_index >= len(API_KEYS):
         key_index = len(API_KEYS) - 1
         
     current_key = API_KEYS[key_index]
-    
-    # বর্তমান চাবি দিয়ে ইউটিউব ক্লায়েন্ট তৈরি
     youtube = build("youtube", "v3", developerKey=current_key)
     
-    print(f"Processing Country {i+1}/{len(region_codes)}: {region} using API Key Index: {key_index}")
+    print(f"Processing Country {i+1}/{len(region_codes)}: {region}")
     final_data[region] = {}
     
     for cat_name, cat_id in category_map.items():
         try:
             final_data[region][cat_name] = fetch_videos(youtube, region, cat_id)
         except Exception as e:
-            print(f"⚠️ Error fetching {cat_name} for {region} using Key Index {key_index}: {e}")
             final_data[region][cat_name] = []
 
 # JSON ফাইলে ডেটা সেভ করা
 with open("videos.json", "w", encoding="utf-8") as f:
     json.dump(final_data, f, indent=4, ensure_ascii=False)
 
-print("✅ Videos.json generated successfully with 25 videos per category!")
+print(f"✅ Videos.json generated. Total videos fetched: {total_videos_fetched}")
+
+# 🔔 ফায়ারবেস পুশ নোটিফিকেশন পাঠানোর অংশ
+firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+if firebase_secret:
+    try:
+        cred_dict = json.loads(firebase_secret)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+        
+        # নোটিফিকেশন মেসেজ কনফিগারেশন
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title="🔥 নতুন ভাইরাল ভিডিও অ্যালার্ট!",
+                body=f"গত ৬ ঘণ্টায় বিশ্বজুড়ে মোট {total_videos_fetched}টি নতুন ভাইরাল ভিডিও যুক্ত হয়েছে। এখনই অ্যাপ খুলে দেখুন!"
+            ),
+            topic="all_users"  # সব ইউজার এই টপিকে সাবস্ক্রাইবড থাকবে
+        )
+        
+        response = messaging.send(message)
+        print(f"🔔 Notification sent successfully! Message ID: {response}")
+    except Exception as e:
+        print(f"⚠️ Failed to send notification: {e}")
+else:
+    print("⚠️ Firebase secret not found. Skipping notification.")
