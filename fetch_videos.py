@@ -87,6 +87,7 @@ with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: json.dump(seen_ids, f)
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 if firebase_secret and total_new_videos > 0:
     try:
+        print(f"🔑 Service account project_id: {json.loads(firebase_secret).get('project_id')}")
         if not firebase_admin._apps:
             firebase_admin.initialize_app(credentials.Certificate(json.loads(firebase_secret)))
         message = messaging.Message(
