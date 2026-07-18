@@ -2,7 +2,7 @@ name: Auto Fetch Trending Videos
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টা পর পর অটো রান হবে
+    - cron: '0 */3 * * *' # প্রতি ৬ ঘণ্টা পর পর অটো রান হবে
   workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
 
 permissions:
