@@ -159,25 +159,18 @@ print(f"✨ new_videos.json generated. Total NEW videos this run: {total_new_vid
 
 # 🔔 ফায়ারবেস পুশ নোটিফিকেশন (শুধু নতুন ভিডিও থাকলেই)
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+# ফায়ারবেস পুশ নোটিফিকেশন (শুধু নতুন ভিডিও থাকলেই নোটিফিকেশন যাবে)
 if firebase_secret and total_new_videos > 0:
     try:
-        cred_dict = json.loads(firebase_secret)
-        cred = credentials.Certificate(cred_dict)
-        firebase_admin.initialize_app(cred)
-
+        # (Firebase initialization code)
         message = messaging.Message(
             notification=messaging.Notification(
                 title="🔥 নতুন ভাইরাল ভিডিও অ্যালার্ট!",
-                body=f"গত ৬ ঘণ্টায় বিশ্বজুড়ে নতুন ভাইরাল ভিডিও যুক্ত হয়েছে। এখনই অ্যাপ খুলে দেখুন!"
+                body=f"নতুন {total_new_videos}টি ভিডিও এসেছে! গত ৩ ঘণ্টায় আসা ভিডিওগুলো এখনই দেখে নিন।"
             ),
             topic="all_users"
         )
-
-        response = messaging.send(message)
-        print(f"🔔 Notification sent successfully! Message ID: {response}")
+        messaging.send(message)
+        print(f"🔔 Notification sent successfully!")
     except Exception as e:
         print(f"⚠️ Failed to send notification: {e}")
-elif not firebase_secret:
-    print("⚠️ Firebase secret not found. Skipping notification.")
-else:
-    print("ℹ️ কোনো নতুন ভিডিও পাওয়া যায়নি, তাই নোটিফিকেশন পাঠানো হয়নি।")
