@@ -45,7 +45,7 @@ VIDEOS_FILE = "videos.json"          # প্রতি রানে পুরো
 NEW_VIDEOS_FILE = "new_videos.json"  # শুধু এই রানের নতুন ভিডিওগুলো (ওভাররাইট হয়, জমে থাকে না)
 SEEN_IDS_FILE = "seen_ids.json"      # "কোন আইডি কখন প্রথম দেখা হয়েছিল" -- পুরনো হলে নিজে থেকে মুছে যায়
 
-RETENTION_DAYS = 3  # এর চেয়ে পুরনো seen আইডি বাদ দেওয়া হবে (ফাইল যেন চিরকাল না বাড়ে)
+RETENTION_DAYS = 1  # এর চেয়ে পুরনো seen আইডি বাদ দেওয়া হবে (ফাইল যেন চিরকাল না বাড়ে)
 
 final_data = {}
 new_only_data = {}
