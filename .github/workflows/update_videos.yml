@@ -33,6 +33,10 @@ jobs:
           API_KEY_3: ${{ secrets.API_KEY_3 }}
           API_KEY_4: ${{ secrets.API_KEY_4 }}
           API_KEY_5: ${{ secrets.API_KEY_5 }}
+          API_KEY_6: ${{ secrets.API_KEY_6 }}
+          API_KEY_7: ${{ secrets.API_KEY_7 }}
+          API_KEY_8: ${{ secrets.API_KEY_8 }}
+          API_KEY_9: ${{ secrets.API_KEY_9 }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python fetch_videos.py
 
