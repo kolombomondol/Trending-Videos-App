@@ -1,13 +1,13 @@
 import json
 import os
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from googleapiclient.discovery import build
 import firebase_admin
 from firebase_admin import credentials, messaging
 
-# কনফিগারেশন
-API_KEYS = [os.environ.get(f"API_KEY_{i}") for i in range(1, 6)]
+# কনফিগারেশন - সব API_KEY_ স্বয়ংক্রিয়ভাবে লোড হবে
+API_KEYS = [value for key, value in os.environ.items() if key.startswith("API_KEY_")]
 API_KEYS = [key for key in API_KEYS if key]
 VIDEOS_FILE = "videos.json"
 NEW_VIDEOS_FILE = "new_videos.json"
@@ -16,6 +16,8 @@ RETENTION_DAYS = 3
 
 if not API_KEYS:
     raise ValueError("❌ Error: No API Keys found!")
+else:
+    print(f"✅ Total {len(API_KEYS)} API Keys loaded.")
 
 region_codes = ["US", "BD", "IN", "GB", "SA", "AE", "PK", "CA", "AU", "DE", "FR", "JP", "KR", "ID", "NG", "MY", "SG", "TR", "IT", "ES", "DZ", "AR", "AT", "AZ", "BH", "BY", "BE", "BO", "BA", "BR", "BG", "CL", "CO", "CR", "HR", "CY", "CZ", "DK", "DO", "EC", "EG", "SV", "EE", "FI", "GE", "GH", "GR", "GT", "HN", "HK", "HU", "IS", "IQ", "IE", "IL", "JM", "JO", "KZ", "KE", "KW", "LV", "LB", "LY", "LI", "LT", "LU", "MK", "MT", "MX", "ME", "MA", "NP", "NL", "NZ", "NI", "NO", "OM", "PA", "PG", "PY", "PE", "PH", "PL", "PT", "QA", "RO", "RU", "SN", "RS", "SK", "SI", "ZA", "LK", "SE", "CH", "TW", "TZ", "TH", "TN", "UG", "UA", "UY", "VE", "VN", "YE", "ZW"]
 category_map = {"comedy": "23", "song": "10", "news": "25", "sports": "17", "vlog": "22"}
@@ -66,6 +68,7 @@ final_data, new_only_data = {}, {}
 total_videos_fetched, total_new_videos = 0, 0
 
 for i, region in enumerate(region_codes):
+    # API_KEYS এর সংখ্যা অনুযায়ী ডায়নামিকলি কী নির্বাচন করা হচ্ছে
     youtube = build("youtube", "v3", developerKey=API_KEYS[i // 20 % len(API_KEYS)])
     final_data[region], new_only_data[region] = {}, {}
     for cat_name, cat_id in category_map.items():
@@ -75,7 +78,8 @@ for i, region in enumerate(region_codes):
             if new_v: new_only_data[region][cat_name] = new_v
             total_videos_fetched += len(all_v)
             total_new_videos += len(new_v)
-        except: continue
+        except Exception as e:
+            continue
     if not new_only_data[region]: del new_only_data[region]
 
 # ফাইল সেভ
@@ -83,11 +87,10 @@ with open(VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(final_data, f, ind
 with open(NEW_VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(new_only_data, f, indent=4, ensure_ascii=False)
 with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: json.dump(seen_ids, f)
 
-# নোটিফিকেশন (English)
+# নোটিফিকেশন
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 if firebase_secret and total_new_videos > 0:
     try:
-        print(f"🔑 Service account project_id: {json.loads(firebase_secret).get('project_id')}")
         if not firebase_admin._apps:
             firebase_admin.initialize_app(credentials.Certificate(json.loads(firebase_secret)))
         message = messaging.Message(
