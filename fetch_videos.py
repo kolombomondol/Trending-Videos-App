@@ -1,4 +1,4 @@
-herimport json
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -69,7 +69,6 @@ for i, region in enumerate(region_codes):
             continue
     if not new_only_data[region]: del new_only_data[region]
 
-# DEBUG মেসেজ
 print(f"DEBUG: Total videos in final_data: {total_videos_fetched}")
 print(f"DEBUG: Total new videos: {total_new_videos}")
 
@@ -77,7 +76,6 @@ with open(VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(final_data, f, ind
 with open(NEW_VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(new_only_data, f, indent=4, ensure_ascii=False)
 with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: json.dump(seen_ids, f)
 
-# নোটিফিকেশন লজিক
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 if firebase_secret and total_new_videos > 0:
     try:
