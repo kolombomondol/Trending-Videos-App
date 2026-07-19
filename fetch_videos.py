@@ -1,4 +1,4 @@
-import json
+herimport json
 import os
 import time
 from datetime import datetime, timezone
@@ -12,7 +12,6 @@ API_KEYS = [key for key in API_KEYS if key]
 VIDEOS_FILE = "videos.json"
 NEW_VIDEOS_FILE = "new_videos.json"
 SEEN_IDS_FILE = "seen_ids.json"
-RETENTION_DAYS = 3
 
 if not API_KEYS:
     raise ValueError("❌ Error: No API Keys found!")
@@ -24,7 +23,6 @@ category_map = {"comedy": "23", "song": "10", "news": "25", "sports": "17", "vlo
 
 now = datetime.now(timezone.utc)
 
-# seen_ids লোড
 seen_ids = {}
 if os.path.exists(SEEN_IDS_FILE):
     with open(SEEN_IDS_FILE, "r", encoding="utf-8") as f:
@@ -36,39 +34,28 @@ def fetch_videos(youtube_client, region, cat_id):
     
     all_videos = []
     new_videos = []
-
     for item in response.get("items", []):
         video_id = item["id"]
         snippet = item["snippet"]
         stats = item["statistics"]
-        
-        first_seen = now.isoformat()
-        if video_id in seen_ids:
-            first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
-        
         video_obj = {
             "id": video_id,
             "title": snippet["title"],
             "channelTitle": snippet["channelTitle"],
             "thumbnailUrl": snippet["thumbnails"]["high"]["url"],
             "viewCount": stats.get("viewCount", "0"),
-            "publishedAt": snippet["publishedAt"],
-            "firstSeenAt": first_seen
+            "publishedAt": snippet["publishedAt"]
         }
-
         all_videos.append(video_obj)
         if video_id not in seen_ids:
             new_videos.append(video_obj)
-            seen_ids[video_id] = {"firstSeenAt": first_seen}
-            
+            seen_ids[video_id] = {"firstSeenAt": now.isoformat()}
     return all_videos, new_videos
 
-# মেইন লুপ
 final_data, new_only_data = {}, {}
 total_videos_fetched, total_new_videos = 0, 0
 
 for i, region in enumerate(region_codes):
-    # API_KEYS এর সংখ্যা অনুযায়ী ডায়নামিকলি কী নির্বাচন করা হচ্ছে
     youtube = build("youtube", "v3", developerKey=API_KEYS[i // 20 % len(API_KEYS)])
     final_data[region], new_only_data[region] = {}, {}
     for cat_name, cat_id in category_map.items():
@@ -82,24 +69,23 @@ for i, region in enumerate(region_codes):
             continue
     if not new_only_data[region]: del new_only_data[region]
 
-# ফাইল সেভ
+# DEBUG মেসেজ
+print(f"DEBUG: Total videos in final_data: {total_videos_fetched}")
+print(f"DEBUG: Total new videos: {total_new_videos}")
+
 with open(VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(final_data, f, indent=4, ensure_ascii=False)
 with open(NEW_VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(new_only_data, f, indent=4, ensure_ascii=False)
 with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: json.dump(seen_ids, f)
 
-# নোটিফিকেশন
+# নোটিফিকেশন লজিক
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 if firebase_secret and total_new_videos > 0:
     try:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(credentials.Certificate(json.loads(firebase_secret)))
         message = messaging.Message(
-            notification=messaging.Notification(
-                title="🔥 New Trending Videos Alert!",
-                body=f"{total_new_videos} new viral videos just arrived! Check them out now."
-            ),
+            notification=messaging.Notification(title="🔥 New Videos!", body=f"{total_new_videos} new viral videos found!"),
             topic="all_users"
         )
         messaging.send(message)
-        print("🔔 Notification sent successfully!")
     except Exception as e: print(f"⚠️ Error: {e}")
