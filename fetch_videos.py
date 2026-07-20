@@ -38,18 +38,31 @@ def fetch_videos(youtube_client, region, cat_id):
         video_id = item["id"]
         snippet = item["snippet"]
         stats = item["statistics"]
+        
+        # 🟢 ভিডিওটি প্রথম কখন দেখা গেছে তা বের করা
+        if video_id not in seen_ids:
+            first_seen = now.isoformat()
+            seen_ids[video_id] = {"firstSeenAt": first_seen}
+            is_brand_new = True
+        else:
+            first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
+            is_brand_new = False
+
+        # 🟢 video_obj-এর ভেতর 'firstSeenAt' যুক্ত করা হলো
         video_obj = {
             "id": video_id,
             "title": snippet["title"],
             "channelTitle": snippet["channelTitle"],
             "thumbnailUrl": snippet["thumbnails"]["high"]["url"],
             "viewCount": stats.get("viewCount", "0"),
-            "publishedAt": snippet["publishedAt"]
+            "publishedAt": snippet["publishedAt"],
+            "firstSeenAt": first_seen  # 👈 এই ফিল্ডটি আগে মিসিং ছিল!
         }
+        
         all_videos.append(video_obj)
-        if video_id not in seen_ids:
+        if is_brand_new:
             new_videos.append(video_obj)
-            seen_ids[video_id] = {"firstSeenAt": now.isoformat()}
+
     return all_videos, new_videos
 
 final_data, new_only_data = {}, {}
