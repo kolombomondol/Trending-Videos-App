@@ -1,15 +1,15 @@
-Name: Auto Fetch Trending Videos
+name: Auto Fetch Trending Videos
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # প্রতি ৬ ঘণ্টা পর পর অটো রান হবে
-  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  update-json:
+  update-youtube:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,8 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install google-api-python-client firebase-admin requests
+          pip install google-api-python-client firebase-admin
 
-      # 🔴 ১. ইউটিউব ভিডিও ফেচ করে videos.json তৈরি করবে
       - name: Run YouTube Script
         env:
           API_KEY_1: ${{ secrets.API_KEY_1 }}
@@ -41,17 +40,10 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: python fetch_videos.py
 
-      # 🟢 ২. টিকটক ভিডিও ফেচ করে tiktok_videos.json তৈরি করবে
-      - name: Run TikTok Script
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-        run: python tiktok_scraper.py
-
-      # 🔄 ৩. ইউটিউব ও টিকটকের ফাইলগুলো আলাদাভাবে গিটহাবে Commit & Push করবে
-      - name: Commit and Push Changes
+      - name: Commit and Push YouTube Data
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add videos.json tiktok_videos.json tiktok_seen_ids.json
-          git commit -m "🔄 Auto-updated YouTube (videos.json) & TikTok (tiktok_videos.json) data" || exit 0
+          git add videos.json
+          git commit -m "🔄 Auto-updated YouTube videos.json" || exit 0
           git push
