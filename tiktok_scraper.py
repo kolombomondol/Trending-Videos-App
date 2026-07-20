@@ -61,7 +61,7 @@ def fetch_worldwide_viral_videos():
     }
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
     }
 
     country_videos_map = {}
@@ -72,30 +72,34 @@ def fetch_worldwide_viral_videos():
     print(f"🚀 Fetching Viral Videos for {len(countries)} Countries...")
 
     for code, country_name in countries.items():
-        print(f"🌍 Fetching 50 videos for: {country_name} ({code})...")
-        country_videos = []
+        print(f"🌍 Fetching videos for: {country_name} ({code})...")
+        raw_country_videos = []
         added_ids = set()
+        cursor = 0
 
-        for page in range(1, 3):  # গতি বজায় রাখার জন্য ২ পেইজ রান করবে
-            if len(country_videos) >= 50:
+        for attempt in range(3):
+            if len(raw_country_videos) >= 50:
                 break
 
             params = {
                 "region": code,
-                "count": 30
+                "count": 30,
+                "cursor": cursor
             }
 
             try:
-                # রেসপন্স ফাস্ট রাখার জন্য ৫ সেকেন্ডের টাইমআউট
                 response = requests.get(url, params=params, headers=headers, timeout=5)
                 if response.status_code != 200:
                     continue
 
                 data = response.json()
-                items = data.get("data", []) or []
+                items = data.get("data", {}).get("videos", []) or data.get("data", []) or []
+
+                if not items:
+                    break
 
                 for item in items:
-                    if len(country_videos) >= 50:
+                    if len(raw_country_videos) >= 50:
                         break
 
                     video_id = str(item.get("video_id") or item.get("id") or "")
@@ -111,7 +115,8 @@ def fetch_worldwide_viral_videos():
                     else:
                         first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
 
-                    play_url = item.get("play") or item.get("wmplay") or ""
+                    # 🚀 ফাস্ট ও এইচডি প্লে ইউআরএল চয়েস
+                    play_url = item.get("hdplay") or item.get("play") or item.get("wmplay") or ""
                     if play_url and not play_url.startswith("http"):
                         play_url = f"https://www.tikwm.com{play_url}"
 
@@ -119,32 +124,53 @@ def fetch_worldwide_viral_videos():
                     if thumbnail_url and not thumbnail_url.startswith("http"):
                         thumbnail_url = f"https://www.tikwm.com{thumbnail_url}"
 
+                    view_count_val = int(item.get("play_count", 0))
+
                     video_obj = {
                         "id": video_id,
                         "title": item.get("title", f"Viral TikTok Video - {country_name}"),
                         "author": item.get("author", {}).get("nickname", "TikTok Creator"),
                         "playUrl": play_url,
                         "thumbnailUrl": thumbnail_url,
-                        "viewCount": str(item.get("play_count", 0)),
+                        "viewCount": str(view_count_val),
                         "country": country_name,
                         "countryCode": code,
                         "publishedAt": now.isoformat(),
                         "firstSeenAt": first_seen
                     }
-                    country_videos.append(video_obj)
+                    raw_country_videos.append(video_obj)
 
-                    if video_id not in added_global_ids:
-                        added_global_ids.add(video_id)
-                        all_global_videos.append(video_obj)
+                cursor = data.get("data", {}).get("cursor", cursor + 30) if isinstance(data.get("data"), dict) else cursor + 30
 
             except Exception as e:
-                print(f"⏩ Skipped {country_name} due to timeout/error")
+                print(f"⏩ Skipped request for {country_name} (Attempt {attempt+1}) due to timeout/error")
 
-        if country_videos:
-            country_videos_map[code] = country_videos
-            print(f"✅ Saved {len(country_videos)} videos for {country_name}")
+        # 🚀 ফিল্টারিং: ১ মিলিয়ন+ (১০,০০,০০০) ভিউ ফিল্টার
+        filtered_videos = [v for v in raw_country_videos if int(v.get("viewCount", 0)) >= 1000000]
 
-    # 🌐 Global (All Countries) অপশন (বিশ্বের নানা দেশের মিক্সড ১০০টি ভিডিও)
+        if filtered_videos:
+            # ভিউ সংখ্যা অনুযায়ী ক্রমানুসারে (বড় থেকে ছোট) সাজানো
+            filtered_videos.sort(key=lambda x: int(x.get("viewCount", 0)), reverse=True)
+            country_videos_map[code] = filtered_videos
+            print(f"✅ Saved {len(filtered_videos)} viral videos (1M+ views) for {country_name}")
+            
+            for v in filtered_videos:
+                if v["id"] not in added_global_ids:
+                    added_global_ids.add(v["id"])
+                    all_global_videos.append(v)
+        else:
+            # যদি ১ মিলিয়নের ওপর ভিডিও না থাকে, তবে সর্বোচ্চ ভিউ হওয়া সেরা ভিডিওগুলো রাখবে (Fallback)
+            raw_country_videos.sort(key=lambda x: int(x.get("viewCount", 0)), reverse=True)
+            country_videos_map[code] = raw_country_videos[:15]
+            print(f"⚠️ No 1M+ videos found for {country_name}, saved top viewed ones.")
+            
+            for v in raw_country_videos[:15]:
+                if v["id"] not in added_global_ids:
+                    added_global_ids.add(v["id"])
+                    all_global_videos.append(v)
+
+    # 🌐 Global (All Countries) অপশন
+    all_global_videos.sort(key=lambda x: int(x.get("viewCount", 0)), reverse=True)
     country_videos_map["GLOBAL"] = all_global_videos[:600]
 
     return country_videos_map, new_videos_count
@@ -158,4 +184,4 @@ with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
 with open(TIKTOK_SEEN_IDS_FILE, "w", encoding="utf-8") as f:
     json.dump(seen_ids, f, indent=4)
 
-print(f"🎉 Successfully Generated 110+ Countries Viral TikTok Videos ({new_count} new)!")
+print(f"🎉 Successfully Generated Viral TikTok Videos ({new_count} new)!")
