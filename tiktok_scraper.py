@@ -8,7 +8,7 @@ TIKTOK_SEEN_IDS_FILE = "tiktok_seen_ids.json"
 
 now = datetime.now(timezone.utc)
 
-# ১. আগে জমানো ভিডিও আইডি লোড করা
+# ১. আগের জমানো ভিডিও আইডি লোড
 seen_ids = {}
 if os.path.exists(TIKTOK_SEEN_IDS_FILE):
     try:
@@ -17,18 +17,47 @@ if os.path.exists(TIKTOK_SEEN_IDS_FILE):
     except Exception as e:
         print(f"⚠️ Error loading seen IDs: {e}")
 
-def fetch_country_viral_videos():
+def fetch_worldwide_viral_videos():
     url = "https://www.tikwm.com/api/feed/list"
     
-    # 🌍 যে দেশগুলোর ভিডিও আনতে চান (দেশ কোড ও নাম)
+    # 🌍 ১১০+ দেশের তালিকা (Country Codes & Names)
     countries = {
-        "BD": "Bangladesh",
-        "US": "United States",
-        "IN": "India",
-        "GB": "United Kingdom",
-        "BR": "Brazil",
-        "ID": "Indonesia",
-        "JP": "Japan"
+        # South Asia & East Asia
+        "BD": "Bangladesh", "IN": "India", "PK": "Pakistan", "NP": "Nepal", "LK": "Sri Lanka",
+        "MV": "Maldives", "BT": "Bhutan", "ID": "Indonesia", "JP": "Japan", "KR": "South Korea",
+        "PH": "Philippines", "VN": "Vietnam", "TH": "Thailand", "MY": "Malaysia", "SG": "Singapore",
+        "MM": "Myanmar", "KH": "Cambodia", "LA": "Laos", "BN": "Brunei", "MN": "Mongolia",
+        
+        # Middle East & Central Asia
+        "SA": "Saudi Arabia", "AE": "United Arab Emirates", "QA": "Qatar", "KW": "Kuwait",
+        "OM": "Oman", "BH": "Bahrain", "TR": "Turkey", "IQ": "Iraq", "JO": "Jordan",
+        "LB": "Lebanon", "IL": "Israel", "YE": "Yemen", "KZ": "Kazakhstan", "UZ": "Uzbekistan",
+        "KG": "Kyrgyzstan", "TJ": "Tajikistan", "TM": "Turkmenistan", "AF": "Afghanistan",
+        
+        # Americas
+        "US": "United States", "CA": "Canada", "MX": "Mexico", "BR": "Brazil", "AR": "Argentina",
+        "CL": "Chile", "CO": "Colombia", "PE": "Peru", "VE": "Venezuela", "EC": "Ecuador",
+        "BO": "Bolivia", "PY": "Paraguay", "UY": "Uruguay", "CR": "Costa Rica", "PA": "Panama",
+        "GT": "Guatemala", "HN": "Honduras", "SV": "El Salvador", "NI": "Nicaragua", "DO": "Dominican Republic",
+        "JM": "Jamaica", "TT": "Trinidad and Tobago", "CUB": "Cuba", "HT": "Haiti",
+        
+        # Europe
+        "GB": "United Kingdom", "DE": "Germany", "FR": "France", "IT": "Italy", "ES": "Spain",
+        "NL": "Netherlands", "PL": "Poland", "SE": "Sweden", "NO": "Norway", "FI": "Finland",
+        "DK": "Denmark", "CH": "Switzerland", "AT": "Austria", "BE": "Belgium", "PT": "Portugal",
+        "GR": "Greece", "IE": "Ireland", "RO": "Romania", "HU": "Hungary", "CZ": "Czech Republic",
+        "SK": "Slovakia", "BG": "Bulgaria", "HR": "Croatia", "RS": "Serbia", "UA": "Ukraine",
+        "RU": "Russia", "BY": "Belarus", "LT": "Lithuania", "LV": "Latvia", "EE": "Estonia",
+        "IS": "Iceland", "AL": "Albania", "MK": "North Macedonia", "CY": "Cyprus", "LU": "Luxembourg",
+        
+        # Africa
+        "EG": "Egypt", "ZA": "South Africa", "NG": "Nigeria", "KE": "Kenya", "MA": "Morocco",
+        "DZ": "Algeria", "TN": "Tunisia", "GH": "Ghana", "ET": "Ethiopia", "TZ": "Tanzania",
+        "UG": "Uganda", "CM": "Cameroon", "CIV": "Ivory Coast", "SN": "Senegal", "ZW": "Zimbabwe",
+        "AO": "Angola", "MZ": "Mozambique", "SD": "Sudan", "LY": "Libya", "MAD": "Madagascar",
+        
+        # Oceania
+        "AU": "Australia", "NZ": "New Zealand", "FJ": "Fiji", "PG": "Papua New Guinea"
     }
     
     headers = {
@@ -37,26 +66,28 @@ def fetch_country_viral_videos():
 
     country_videos_map = {}
     new_videos_count = 0
+    all_global_videos = []
+    added_global_ids = set()
 
-    print("🚀 Fetching 50 Viral Videos per Country...")
+    print(f"🚀 Fetching Viral Videos for {len(countries)} Countries...")
 
     for code, country_name in countries.items():
         print(f"🌍 Fetching 50 videos for: {country_name} ({code})...")
         country_videos = []
         added_ids = set()
 
-        # ৫০টি ভিডিও কভার করতে ২ থেকে ৩টি ফেচ লুপ চালানো
-        for page in range(1, 4):
+        for page in range(1, 3):  # গতি বজায় রাখার জন্য ২ পেইজ রান করবে
             if len(country_videos) >= 50:
                 break
 
             params = {
                 "region": code,
-                "count": 25
+                "count": 30
             }
 
             try:
-                response = requests.get(url, params=params, headers=headers, timeout=15)
+                # রেসপন্স ফাস্ট রাখার জন্য ৫ সেকেন্ডের টাইমআউট
+                response = requests.get(url, params=params, headers=headers, timeout=5)
                 if response.status_code != 200:
                     continue
 
@@ -80,7 +111,6 @@ def fetch_country_viral_videos():
                     else:
                         first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
 
-                    # লিঙ্ক ও থাম্বনেইল
                     play_url = item.get("play") or item.get("wmplay") or ""
                     if play_url and not play_url.startswith("http"):
                         play_url = f"https://www.tikwm.com{play_url}"
@@ -103,21 +133,29 @@ def fetch_country_viral_videos():
                     }
                     country_videos.append(video_obj)
 
-            except Exception as e:
-                print(f"❌ Error fetching {country_name}: {e}")
+                    if video_id not in added_global_ids:
+                        added_global_ids.add(video_id)
+                        all_global_videos.append(video_obj)
 
-        country_videos_map[code] = country_videos
-        print(f"✅ Fetched {len(country_videos)} videos for {country_name}")
+            except Exception as e:
+                print(f"⏩ Skipped {country_name} due to timeout/error")
+
+        if country_videos:
+            country_videos_map[code] = country_videos
+            print(f"✅ Saved {len(country_videos)} videos for {country_name}")
+
+    # 🌐 Global (All Countries) অপশন (বিশ্বের নানা দেশের মিক্সড ১০০টি ভিডিও)
+    country_videos_map["GLOBAL"] = all_global_videos[:600]
 
     return country_videos_map, new_videos_count
 
-tiktok_data, new_count = fetch_country_viral_videos()
+tiktok_data, new_count = fetch_worldwide_viral_videos()
 
-# JSON ফাইলে সেভ করা
+# JSON ফাইল সেভ
 with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
     json.dump({"tiktok_by_country": tiktok_data}, f, indent=4, ensure_ascii=False)
 
 with open(TIKTOK_SEEN_IDS_FILE, "w", encoding="utf-8") as f:
     json.dump(seen_ids, f, indent=4)
 
-print(f"🎉 Saved Videos for All Countries Successfully ({new_count} new)!")
+print(f"🎉 Successfully Generated 110+ Countries Viral TikTok Videos ({new_count} new)!")
