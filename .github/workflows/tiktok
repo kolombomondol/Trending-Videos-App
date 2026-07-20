@@ -1,0 +1,40 @@
+name: Auto Fetch TikTok Videos
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-tiktok:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests
+
+      - name: Run TikTok Script
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+        run: python tiktok_scraper.py
+
+      - name: Commit and Push TikTok Data
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add tiktok_videos.json tiktok_seen_ids.json
+          git commit -m "🔄 Auto-updated TikTok videos data" || exit 0
+          git push
