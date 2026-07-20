@@ -1,4 +1,4 @@
-name: Auto Fetch TikTok Videos
+name: Auto Fetch Tiktok Videos
 
 on:
   schedule:
