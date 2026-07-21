@@ -28,10 +28,7 @@ jobs:
 
       - name: Run TikTok Script
         env:
-          PROXY_HOST: ${{ secrets.PROXY_HOST }}
-          PROXY_PORT: ${{ secrets.PROXY_PORT }}
-          PROXY_USER: ${{ secrets.PROXY_USER }}
-          PROXY_PASS: ${{ secrets.PROXY_PASS }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         run: python tiktok_scraper.py
 
       - name: Commit and Push TikTok Data
