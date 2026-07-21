@@ -7,6 +7,19 @@ import yt_dlp
 TIKTOK_VIDEOS_FILE = "tiktok_videos.json"
 TIKTOK_SEEN_IDS_FILE = "tiktok_seen_ids.json"
 
+# 🔌 প্রক্সি কনফিগারেশন — GitHub Secrets থেকে আসবে, কোডে কোনো ক্রেডেনশিয়াল হার্ডকোড করা নেই
+PROXY_HOST = os.environ.get("PROXY_HOST", "")
+PROXY_PORT = os.environ.get("PROXY_PORT", "")
+PROXY_USER = os.environ.get("PROXY_USER", "")
+PROXY_PASS = os.environ.get("PROXY_PASS", "")
+
+PROXY_URL = ""
+if PROXY_HOST and PROXY_PORT and PROXY_USER and PROXY_PASS:
+    PROXY_URL = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
+    print("🔌 Proxy configured, requests will route through it.")
+else:
+    print("⚠️ No proxy configured — running with direct connection (may get blocked).")
+
 now = datetime.now(timezone.utc)
 
 # ১. আগের জমানো ভিডিও আইডি লোড
@@ -42,6 +55,7 @@ YDL_OPTS = {
     "skip_download": True,
     "playlistend": MAX_PER_HASHTAG,
     "socket_timeout": 15,
+    "proxy": PROXY_URL,
 }
 
 
@@ -83,7 +97,7 @@ def get_direct_play_url(webpage_url: str):
     হ্যাশট্যাগ লিস্টিং থেকে সরাসরি .mp4 লিংক পাওয়া যায় না (extract_flat=True দ্রুত হওয়ার জন্য),
     তাই প্রতিটা ভিডিওর আসল প্লে-লিংক বের করতে এই ফাংশনটা আলাদাভাবে খুলে চেক করে।
     """
-    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 15}
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 15, "proxy": PROXY_URL}
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(webpage_url, download=False)
