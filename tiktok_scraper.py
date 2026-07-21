@@ -1,26 +1,15 @@
 import json
 import os
+import time
+import requests
 from datetime import datetime, timezone
-
-import yt_dlp
 
 TIKTOK_VIDEOS_FILE = "tiktok_videos.json"
 TIKTOK_SEEN_IDS_FILE = "tiktok_seen_ids.json"
 
-# 🔌 প্রক্সি কনফিগারেশন — GitHub Secrets থেকে আসবে, কোডে কোনো ক্রেডেনশিয়াল হার্ডকোড করা নেই
-PROXY_HOST = os.environ.get("PROXY_HOST", "")
-PROXY_PORT = os.environ.get("PROXY_PORT", "")
-PROXY_USER = os.environ.get("PROXY_USER", "")
-PROXY_PASS = os.environ.get("PROXY_PASS", "")
-
-PROXY_URL = ""
-if PROXY_HOST and PROXY_PORT and PROXY_USER and PROXY_PASS:
-    PROXY_URL = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
-    print("🔌 Proxy configured, requests will route through it.")
-else:
-    print("⚠️ No proxy configured — running with direct connection (may get blocked).")
-
 now = datetime.now(timezone.utc)
+
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
 
 # ১. আগের জমানো ভিডিও আইডি লোড
 seen_ids = {}
@@ -31,151 +20,195 @@ if os.path.exists(TIKTOK_SEEN_IDS_FILE):
     except Exception as e:
         print(f"⚠️ Error loading seen IDs: {e}")
 
-# 🌍 দেশের তালিকা (Android অ্যাপের spinner-এর সাথে মিলিয়ে)
 COUNTRIES = {
     "BD": "Bangladesh", "IN": "India", "PK": "Pakistan", "NP": "Nepal", "LK": "Sri Lanka",
-    "ID": "Indonesia", "JP": "Japan", "KR": "South Korea", "PH": "Philippines", "VN": "Vietnam",
-    "TH": "Thailand", "MY": "Malaysia", "SG": "Singapore", "SA": "Saudi Arabia",
-    "AE": "United Arab Emirates", "QA": "Qatar", "KW": "Kuwait", "TR": "Turkey",
-    "US": "United States", "CA": "Canada", "MX": "Mexico", "BR": "Brazil",
+    "MV": "Maldives", "BT": "Bhutan", "ID": "Indonesia", "JP": "Japan", "KR": "South Korea",
+    "PH": "Philippines", "VN": "Vietnam", "TH": "Thailand", "MY": "Malaysia", "SG": "Singapore",
+    "MM": "Myanmar", "KH": "Cambodia", "LA": "Laos", "BN": "Brunei", "MN": "Mongolia",
+
+    "SA": "Saudi Arabia", "AE": "United Arab Emirates", "QA": "Qatar", "KW": "Kuwait",
+    "OM": "Oman", "BH": "Bahrain", "TR": "Turkey", "IQ": "Iraq", "JO": "Jordan",
+    "LB": "Lebanon", "IL": "Israel", "YE": "Yemen", "KZ": "Kazakhstan", "UZ": "Uzbekistan",
+    "KG": "Kyrgyzstan", "TJ": "Tajikistan", "TM": "Turkmenistan", "AF": "Afghanistan",
+
+    "US": "United States", "CA": "Canada", "MX": "Mexico", "BR": "Brazil", "AR": "Argentina",
+    "CL": "Chile", "CO": "Colombia", "PE": "Peru", "VE": "Venezuela", "EC": "Ecuador",
+    "BO": "Bolivia", "PY": "Paraguay", "UY": "Uruguay", "CR": "Costa Rica", "PA": "Panama",
+    "GT": "Guatemala", "HN": "Honduras", "SV": "El Salvador", "NI": "Nicaragua", "DO": "Dominican Republic",
+    "JM": "Jamaica", "TT": "Trinidad and Tobago", "CUB": "Cuba", "HT": "Haiti",
+
     "GB": "United Kingdom", "DE": "Germany", "FR": "France", "IT": "Italy", "ES": "Spain",
-    "NL": "Netherlands", "AU": "Australia", "EG": "Egypt", "ZA": "South Africa", "NG": "Nigeria",
+    "NL": "Netherlands", "PL": "Poland", "SE": "Sweden", "NO": "Norway", "FI": "Finland",
+    "DK": "Denmark", "CH": "Switzerland", "AT": "Austria", "BE": "Belgium", "PT": "Portugal",
+    "GR": "Greece", "IE": "Ireland", "RO": "Romania", "HU": "Hungary", "CZ": "Czech Republic",
+    "SK": "Slovakia", "BG": "Bulgaria", "HR": "Croatia", "RS": "Serbia", "UA": "Ukraine",
+    "RU": "Russia", "BY": "Belarus", "LT": "Lithuania", "LV": "Latvia", "EE": "Estonia",
+    "IS": "Iceland", "AL": "Albania", "MK": "North Macedonia", "CY": "Cyprus", "LU": "Luxembourg",
+
+    "EG": "Egypt", "ZA": "South Africa", "NG": "Nigeria", "KE": "Kenya", "MA": "Morocco",
+    "DZ": "Algeria", "TN": "Tunisia", "GH": "Ghana", "ET": "Ethiopia", "TZ": "Tanzania",
+    "UG": "Uganda", "CM": "Cameroon", "CIV": "Ivory Coast", "SN": "Senegal", "ZW": "Zimbabwe",
+    "AO": "Angola", "MZ": "Mozambique", "SD": "Sudan", "LY": "Libya", "MAD": "Madagascar",
+
+    "AU": "Australia", "NZ": "New Zealand", "FJ": "Fiji", "PG": "Papua New Guinea"
 }
 
-# 🔥 ভাইরাল/ট্রেন্ডিং হ্যাশট্যাগ — TikTok-এর পার্সোনালাইজড ফিড লগইন ছাড়া পাওয়া যায় না,
-# তাই জনপ্রিয় হ্যাশট্যাগ পেজ থেকে ভিডিও নেওয়া হচ্ছে (এটাই সবচেয়ে কাছের বাস্তবসম্মত বিকল্প)
-VIRAL_HASHTAGS = ["fyp", "viral", "foryou", "trending", "viralvideo"]
-
-MAX_PER_HASHTAG = 40
-
-YDL_OPTS = {
-    "quiet": True,
-    "no_warnings": True,
-    "extract_flat": True,   # প্রতিটা ভিডিও আলাদাভাবে না খুলে দ্রুত লিস্ট বের করা
-    "skip_download": True,
-    "playlistend": MAX_PER_HASHTAG,
-    "socket_timeout": 15,
-    "proxy": PROXY_URL,
-}
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 
-def fetch_hashtag_videos(hashtag: str):
-    """yt-dlp দিয়ে সরাসরি TikTok হ্যাশট্যাগ পেজ থেকে ভিডিও লিস্ট বের করে।"""
-    url = f"https://www.tiktok.com/tag/{hashtag}"
-    results = []
+def normalize_video(item, country_name, country_code, source):
+    """যেকোনো সোর্স থেকে আসা ভিডিওকে একই ফরম্যাটে রূপান্তর করে, যাতে Android কোড না বদলায়।"""
+    video_id = str(item.get("video_id") or item.get("id") or "")
+    if not video_id:
+        return None
 
+    play_url = item.get("play") or item.get("wmplay") or item.get("playUrl") or ""
+    if play_url and not play_url.startswith("http"):
+        play_url = f"https://www.tikwm.com{play_url}"
+
+    thumbnail_url = item.get("cover") or item.get("thumbnailUrl") or ""
+    if thumbnail_url and not thumbnail_url.startswith("http"):
+        thumbnail_url = f"https://www.tikwm.com{thumbnail_url}"
+
+    author_field = item.get("author", {})
+    if isinstance(author_field, dict):
+        author_name = author_field.get("nickname", "TikTok Creator")
+    else:
+        author_name = str(author_field or item.get("author", "TikTok Creator"))
+
+    if video_id not in seen_ids:
+        first_seen = now.isoformat()
+        seen_ids[video_id] = {"firstSeenAt": first_seen}
+    else:
+        first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
+
+    return {
+        "id": video_id,
+        "title": item.get("title", f"Viral TikTok Video - {country_name}"),
+        "author": author_name,
+        "playUrl": play_url,
+        "thumbnailUrl": thumbnail_url,
+        "viewCount": str(item.get("play_count", item.get("viewCount", 0))),
+        "country": country_name,
+        "countryCode": country_code,
+        "publishedAt": now.isoformat(),
+        "firstSeenAt": first_seen,
+        "source": source,
+    }
+
+
+# -------------------------------------------------------------------
+# 🥇 প্রাইমারি সোর্স: tikwm.com
+# -------------------------------------------------------------------
+
+def fetch_from_tikwm(country_code, country_name):
+    url = "https://www.tikwm.com/api/feed/list"
+    params = {"region": country_code, "count": 30}
+
+    response = requests.get(url, params=params, headers=HEADERS, timeout=8)
+    response.raise_for_status()
+    data = response.json()
+    items = data.get("data", []) or []
+
+    videos = []
+    added_ids = set()
+    for item in items:
+        video = normalize_video(item, country_name, country_code, source="tikwm")
+        if video and video["id"] not in added_ids:
+            added_ids.add(video["id"])
+            videos.append(video)
+
+    return videos
+
+
+# -------------------------------------------------------------------
+# 🥈 ফলব্যাক সোর্স: RapidAPI-এর একটা TikTok wrapper
+# (নিজের RapidAPI অ্যাকাউন্ট থেকে TikTok API সাবস্ক্রাইব করে key বসাতে হবে)
+# -------------------------------------------------------------------
+
+def fetch_from_rapidapi(country_code, country_name):
+    if not RAPIDAPI_KEY:
+        return []
+
+    url = "https://tiktok-scraper7.p.rapidapi.com/feed/list"
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": "tiktok-scraper7.p.rapidapi.com",
+    }
+    params = {"region": country_code, "count": "30"}
+
+    response = requests.get(url, headers=headers, params=params, timeout=8)
+    response.raise_for_status()
+    data = response.json()
+    items = data.get("data", {}).get("videos", []) if isinstance(data.get("data"), dict) else data.get("data", [])
+
+    videos = []
+    added_ids = set()
+    for item in items or []:
+        video = normalize_video(item, country_name, country_code, source="rapidapi")
+        if video and video["id"] not in added_ids:
+            added_ids.add(video["id"])
+            videos.append(video)
+
+    return videos
+
+
+# -------------------------------------------------------------------
+# মূল লজিক: tikwm ট্রাই করো, ব্যর্থ/খালি হলে RapidAPI ফলব্যাক ট্রাই করো
+# -------------------------------------------------------------------
+
+def fetch_country_videos(country_code, country_name):
     try:
-        with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-            info = ydl.extract_info(url, download=False)
-            entries = info.get("entries", []) if info else []
-
-            for entry in entries:
-                if not entry:
-                    continue
-
-                video_id = str(entry.get("id", ""))
-                webpage_url = entry.get("url") or entry.get("webpage_url", "")
-                if not video_id or not webpage_url:
-                    continue
-
-                results.append({
-                    "video_id": video_id,
-                    "webpage_url": webpage_url,
-                    "title": entry.get("title") or "",
-                    "author": entry.get("uploader") or entry.get("uploader_id") or "",
-                    "thumbnail": entry.get("thumbnail") or "",
-                    "view_count": entry.get("view_count") or 0,
-                })
+        videos = fetch_from_tikwm(country_code, country_name)
+        if videos:
+            return videos, "tikwm"
     except Exception as e:
-        print(f"  ⏩ Hashtag #{hashtag} failed: {e}")
+        print(f"  ⏩ tikwm failed for {country_name}: {e}")
 
-    return results
-
-
-def get_direct_play_url(webpage_url: str):
-    """
-    হ্যাশট্যাগ লিস্টিং থেকে সরাসরি .mp4 লিংক পাওয়া যায় না (extract_flat=True দ্রুত হওয়ার জন্য),
-    তাই প্রতিটা ভিডিওর আসল প্লে-লিংক বের করতে এই ফাংশনটা আলাদাভাবে খুলে চেক করে।
-    """
-    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "socket_timeout": 15, "proxy": PROXY_URL}
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(webpage_url, download=False)
-            return info.get("url", "")
-    except Exception:
-        return ""
+        videos = fetch_from_rapidapi(country_code, country_name)
+        if videos:
+            print(f"  🔁 Fallback (RapidAPI) succeeded for {country_name}")
+            return videos, "rapidapi"
+    except Exception as e:
+        print(f"  ⏩ RapidAPI fallback also failed for {country_name}: {e}")
+
+    return [], None
 
 
 def fetch_worldwide_viral_videos():
-    print(f"🚀 Fetching Viral Videos for {len(COUNTRIES)} Countries via yt-dlp...")
+    print(f"🚀 Fetching Viral Videos for {len(COUNTRIES)} Countries...")
+    if not RAPIDAPI_KEY:
+        print("ℹ️ No RAPIDAPI_KEY set — running with tikwm only, no fallback available.")
 
-    # প্রথমে সব হ্যাশট্যাগ থেকে একটা কমন ভাইরাল পুল বানানো হচ্ছে
-    viral_pool = []
-    seen_pool_ids = set()
-
-    for tag in VIRAL_HASHTAGS:
-        print(f"🔎 Fetching hashtag #{tag}...")
-        videos = fetch_hashtag_videos(tag)
-        print(f"   → {len(videos)} videos found")
-        for v in videos:
-            if v["video_id"] not in seen_pool_ids:
-                seen_pool_ids.add(v["video_id"])
-                viral_pool.append(v)
-
-    print(f"📦 Total unique viral pool: {len(viral_pool)} videos")
-    print("🎬 Resolving direct play URLs (this takes a while)...")
-
-    resolved_videos = []
-    new_videos_count = 0
-
-    for i, v in enumerate(viral_pool):
-        play_url = get_direct_play_url(v["webpage_url"])
-        if not play_url:
-            continue
-
-        video_id = v["video_id"]
-
-        if video_id not in seen_ids:
-            first_seen = now.isoformat()
-            seen_ids[video_id] = {"firstSeenAt": first_seen}
-            new_videos_count += 1
-        else:
-            first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
-
-        resolved_videos.append({
-            "id": video_id,
-            "title": v["title"] or "Viral TikTok Video",
-            "author": v["author"] or "TikTok Creator",
-            "playUrl": play_url,
-            "thumbnailUrl": v["thumbnail"],
-            "viewCount": str(v["view_count"]),
-            "publishedAt": now.isoformat(),
-            "firstSeenAt": first_seen,
-        })
-
-        if (i + 1) % 10 == 0:
-            print(f"   ...resolved {i + 1}/{len(viral_pool)}")
-
-    print(f"✅ Resolved {len(resolved_videos)} playable videos")
-
-    # 🌍 প্রতিটা দেশের জন্য একই ভাইরাল পুল থেকে ভিডিও দেওয়া হচ্ছে
-    # (TikTok হ্যাশট্যাগ পেজ দেশ দিয়ে ফিল্টার করা যায় না — এটা একটা সীমাবদ্ধতা)
     country_videos_map = {}
-    for code, name in COUNTRIES.items():
-        country_specific = []
-        for v in resolved_videos:
-            v_copy = dict(v)
-            v_copy["country"] = name
-            v_copy["countryCode"] = code
-            country_specific.append(v_copy)
-        country_videos_map[code] = country_specific
+    all_global_videos = []
+    added_global_ids = set()
 
-    country_videos_map["GLOBAL"] = resolved_videos[:600]
+    for code, country_name in COUNTRIES.items():
+        print(f"🌍 Fetching videos for: {country_name} ({code})...")
+        videos, used_source = fetch_country_videos(code, country_name)
 
-    return country_videos_map, new_videos_count
+        if videos:
+            country_videos_map[code] = videos
+            print(f"✅ Saved {len(videos)} videos for {country_name} (source: {used_source})")
+
+            for v in videos:
+                if v["id"] not in added_global_ids:
+                    added_global_ids.add(v["id"])
+                    all_global_videos.append(v)
+        else:
+            print(f"❌ 0 videos found for {country_name} (all sources failed)")
+
+        time.sleep(0.5)  # rate-limit এড়াতে একটু বিরতি
+
+    country_videos_map["GLOBAL"] = all_global_videos[:600]
+
+    new_videos_count = sum(1 for vid in seen_ids if seen_ids[vid].get("firstSeenAt") == now.isoformat())
+    return country_videos_map, len(added_global_ids)
 
 
-tiktok_data, new_count = fetch_worldwide_viral_videos()
+tiktok_data, total_count = fetch_worldwide_viral_videos()
 
 with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
     json.dump({"tiktok_by_country": tiktok_data}, f, indent=4, ensure_ascii=False)
@@ -183,4 +216,4 @@ with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
 with open(TIKTOK_SEEN_IDS_FILE, "w", encoding="utf-8") as f:
     json.dump(seen_ids, f, indent=4)
 
-print(f"🎉 Successfully Generated Viral TikTok Videos ({new_count} new)!")
+print(f"🎉 Successfully Generated Viral TikTok Videos ({total_count} total unique)!")
