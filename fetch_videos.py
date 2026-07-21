@@ -41,7 +41,7 @@ def fetch_videos(youtube_client, region, cat_id):
         
         # 🟢 ভিডিওটি প্রথম কখন দেখা গেছে তা বের করা
         if video_id not in seen_ids:
-            first_seen = now.isoformat()
+            first_seen = now.strftime("%Y-%m-%dT%H:%M:%SZ")
             seen_ids[video_id] = {"firstSeenAt": first_seen}
             is_brand_new = True
         else:
