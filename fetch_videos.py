@@ -21,15 +21,26 @@ else:
 region_codes = ["US", "BD", "IN", "GB", "SA", "AE", "PK", "CA", "AU", "DE", "FR", "JP", "KR", "ID", "NG", "MY", "SG", "TR", "IT", "ES", "DZ", "AR", "AT", "AZ", "BH", "BY", "BE", "BO", "BA", "BR", "BG", "CL", "CO", "CR", "HR", "CY", "CZ", "DK", "DO", "EC", "EG", "SV", "EE", "FI", "GE", "GH", "GR", "GT", "HN", "HK", "HU", "IS", "IQ", "IE", "IL", "JM", "JO", "KZ", "KE", "KW", "LV", "LB", "LY", "LI", "LT", "LU", "MK", "MT", "MX", "ME", "MA", "NP", "NL", "NZ", "NI", "NO", "OM", "PA", "PG", "PY", "PE", "PH", "PL", "PT", "QA", "RO", "RU", "SN", "RS", "SK", "SI", "ZA", "LK", "SE", "CH", "TW", "TZ", "TH", "TN", "UG", "UA", "UY", "VE", "VN", "YE", "ZW"]
 category_map = {"comedy": "23", "song": "10", "news": "25", "sports": "17", "vlog": "22"}
 
+# বর্তমান UTC সময় (Standard Format: YYYY-MM-DDTHH:MM:SSZ)
 now = datetime.now(timezone.utc)
+formatted_now = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 seen_ids = {}
 if os.path.exists(SEEN_IDS_FILE):
-    with open(SEEN_IDS_FILE, "r", encoding="utf-8") as f:
-        seen_ids = json.load(f)
+    try:
+        with open(SEEN_IDS_FILE, "r", encoding="utf-8") as f:
+            seen_ids = json.load(f)
+    except Exception as e:
+        print(f"⚠️ Error loading seen_ids.json: {e}")
 
 def fetch_videos(youtube_client, region, cat_id):
-    request = youtube_client.videos().list(part="snippet,statistics", chart="mostPopular", regionCode=region, videoCategoryId=cat_id, maxResults=25)
+    request = youtube_client.videos().list(
+        part="snippet,statistics", 
+        chart="mostPopular", 
+        regionCode=region, 
+        videoCategoryId=cat_id, 
+        maxResults=25
+    )
     response = request.execute()
     
     all_videos = []
@@ -39,16 +50,15 @@ def fetch_videos(youtube_client, region, cat_id):
         snippet = item["snippet"]
         stats = item["statistics"]
         
-        # 🟢 ভিডিওটি প্রথম কখন দেখা গেছে তা বের করা
+        # 🟢 ভিডিওটি প্রথম কখন দেখা গেছে তা স্ট্যান্ডার্ড ফরম্যাটে সেভ করা
         if video_id not in seen_ids:
-            first_seen = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            first_seen = formatted_now
             seen_ids[video_id] = {"firstSeenAt": first_seen}
             is_brand_new = True
         else:
-            first_seen = seen_ids[video_id].get("firstSeenAt", now.isoformat())
+            first_seen = seen_ids[video_id].get("firstSeenAt", formatted_now)
             is_brand_new = False
 
-        # 🟢 video_obj-এর ভেতর 'firstSeenAt' যুক্ত করা হলো
         video_obj = {
             "id": video_id,
             "title": snippet["title"],
@@ -56,7 +66,7 @@ def fetch_videos(youtube_client, region, cat_id):
             "thumbnailUrl": snippet["thumbnails"]["high"]["url"],
             "viewCount": stats.get("viewCount", "0"),
             "publishedAt": snippet["publishedAt"],
-            "firstSeenAt": first_seen  # 👈 এই ফিল্ডটি আগে মিসিং ছিল!
+            "firstSeenAt": first_seen  # 👈 নিখুঁত স্ট্যান্ডার্ড ISO সময়
         }
         
         all_videos.append(video_obj)
@@ -85,9 +95,14 @@ for i, region in enumerate(region_codes):
 print(f"DEBUG: Total videos in final_data: {total_videos_fetched}")
 print(f"DEBUG: Total new videos: {total_new_videos}")
 
-with open(VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(final_data, f, indent=4, ensure_ascii=False)
-with open(NEW_VIDEOS_FILE, "w", encoding="utf-8") as f: json.dump(new_only_data, f, indent=4, ensure_ascii=False)
-with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: json.dump(seen_ids, f)
+with open(VIDEOS_FILE, "w", encoding="utf-8") as f: 
+    json.dump(final_data, f, indent=4, ensure_ascii=False)
+
+with open(NEW_VIDEOS_FILE, "w", encoding="utf-8") as f: 
+    json.dump(new_only_data, f, indent=4, ensure_ascii=False)
+
+with open(SEEN_IDS_FILE, "w", encoding="utf-8") as f: 
+    json.dump(seen_ids, f, indent=4)
 
 firebase_secret = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 if firebase_secret and total_new_videos > 0:
@@ -99,4 +114,6 @@ if firebase_secret and total_new_videos > 0:
             topic="all_users"
         )
         messaging.send(message)
-    except Exception as e: print(f"⚠️ Error: {e}")
+        print("✅ Firebase notification sent successfully!")
+    except Exception as e: 
+        print(f"⚠️ Firebase Error: {e}")
