@@ -101,24 +101,47 @@ def normalize_video(item, country_name, country_code, source):
 # 🥇 প্রাইমারি সোর্স: tikwm.com
 # -------------------------------------------------------------------
 
-def fetch_from_tikwm(country_code, country_name):
+def fetch_from_tikwm(country_code, country_name, max_retries=5):
     url = "https://www.tikwm.com/api/feed/list"
     params = {"region": country_code, "count": 30}
 
-    response = requests.get(url, params=params, headers=HEADERS, timeout=8)
-    response.raise_for_status()
-    data = response.json()
-    items = data.get("data", []) or []
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            # প্রতি চেষ্টায় একটু বেশি সময় দেওয়া হচ্ছে, যাতে সার্ভার busy থাকলেও সুযোগ পায়
+            timeout = 8 + (attempt * 3)
+            response = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            items = data.get("data", []) or []
 
-    videos = []
-    added_ids = set()
-    for item in items:
-        video = normalize_video(item, country_name, country_code, source="tikwm")
-        if video and video["id"] not in added_ids:
-            added_ids.add(video["id"])
-            videos.append(video)
+            if not items:
+                last_error = "empty response"
+                if attempt < max_retries:
+                    time.sleep(2)
+                continue
 
-    return videos
+            videos = []
+            added_ids = set()
+            for item in items:
+                video = normalize_video(item, country_name, country_code, source="tikwm")
+                if video and video["id"] not in added_ids:
+                    added_ids.add(video["id"])
+                    videos.append(video)
+
+            if attempt > 1:
+                print(f"  🔁 tikwm succeeded for {country_name} on attempt {attempt}")
+
+            return videos
+
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                time.sleep(2)  # পরের চেষ্টার আগে একটু বিরতি
+            continue
+
+    # সব চেষ্টা ব্যর্থ হলে
+    raise Exception(f"failed after {max_retries} attempts, last error: {last_error}")
 
 
 # -------------------------------------------------------------------
