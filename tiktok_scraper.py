@@ -11,6 +11,9 @@ now = datetime.now(timezone.utc)
 
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
 
+# শুধু এই সংখ্যার বেশি লাইক পাওয়া ভিডিও রাখা হবে
+MIN_LIKES = 5_000_000
+
 # ১. আগের জমানো ভিডিও আইডি লোড
 seen_ids = {}
 if os.path.exists(TIKTOK_SEEN_IDS_FILE):
@@ -76,6 +79,13 @@ def normalize_video(item, country_name, country_code, source):
     else:
         author_name = str(author_field or item.get("author", "TikTok Creator"))
 
+    # লাইক কাউন্ট বের করা (tikwm: digg_count, অন্য সোর্স: likeCount)
+    like_count = item.get("digg_count", item.get("likeCount", 0))
+    try:
+        like_count = int(like_count)
+    except (TypeError, ValueError):
+        like_count = 0
+
     if video_id not in seen_ids:
         first_seen = now.isoformat()
         seen_ids[video_id] = {"firstSeenAt": first_seen}
@@ -89,6 +99,7 @@ def normalize_video(item, country_name, country_code, source):
         "playUrl": play_url,
         "thumbnailUrl": thumbnail_url,
         "viewCount": str(item.get("play_count", item.get("viewCount", 0))),
+        "likeCount": like_count,
         "country": country_name,
         "countryCode": country_code,
         "publishedAt": now.isoformat(),
@@ -125,9 +136,13 @@ def fetch_from_tikwm(country_code, country_name, max_retries=5):
             added_ids = set()
             for item in items:
                 video = normalize_video(item, country_name, country_code, source="tikwm")
-                if video and video["id"] not in added_ids:
-                    added_ids.add(video["id"])
-                    videos.append(video)
+                if not video or video["id"] in added_ids:
+                    continue
+                # শুধু MIN_LIKES এর বেশি লাইক পাওয়া ভিডিও রাখা হচ্ছে
+                if video["likeCount"] < MIN_LIKES:
+                    continue
+                added_ids.add(video["id"])
+                videos.append(video)
 
             if attempt > 1:
                 print(f"  🔁 tikwm succeeded for {country_name} on attempt {attempt}")
@@ -169,9 +184,13 @@ def fetch_from_rapidapi(country_code, country_name):
     added_ids = set()
     for item in items or []:
         video = normalize_video(item, country_name, country_code, source="rapidapi")
-        if video and video["id"] not in added_ids:
-            added_ids.add(video["id"])
-            videos.append(video)
+        if not video or video["id"] in added_ids:
+            continue
+        # শুধু MIN_LIKES এর বেশি লাইক পাওয়া ভিডিও রাখা হচ্ছে
+        if video["likeCount"] < MIN_LIKES:
+            continue
+        added_ids.add(video["id"])
+        videos.append(video)
 
     return videos
 
@@ -200,7 +219,7 @@ def fetch_country_videos(country_code, country_name):
 
 
 def fetch_worldwide_viral_videos():
-    print(f"🚀 Fetching Viral Videos for {len(COUNTRIES)} Countries...")
+    print(f"🚀 Fetching Viral Videos (50M+ likes) for {len(COUNTRIES)} Countries...")
     if not RAPIDAPI_KEY:
         print("ℹ️ No RAPIDAPI_KEY set — running with tikwm only, no fallback available.")
 
@@ -214,20 +233,21 @@ def fetch_worldwide_viral_videos():
 
         if videos:
             country_videos_map[code] = videos
-            print(f"✅ Saved {len(videos)} videos for {country_name} (source: {used_source})")
+            print(f"✅ Saved {len(videos)} videos (50M+ likes) for {country_name} (source: {used_source})")
 
             for v in videos:
                 if v["id"] not in added_global_ids:
                     added_global_ids.add(v["id"])
                     all_global_videos.append(v)
         else:
-            print(f"❌ 0 videos found for {country_name} (all sources failed)")
+            print(f"❌ 0 videos with 50M+ likes found for {country_name}")
 
         time.sleep(0.5)  # rate-limit এড়াতে একটু বিরতি
 
+    # ভিউ/লাইক অনুযায়ী সাজিয়ে গ্লোবাল লিস্ট তৈরি
+    all_global_videos.sort(key=lambda v: v["likeCount"], reverse=True)
     country_videos_map["GLOBAL"] = all_global_videos[:600]
 
-    new_videos_count = sum(1 for vid in seen_ids if seen_ids[vid].get("firstSeenAt") == now.isoformat())
     return country_videos_map, len(added_global_ids)
 
 
@@ -239,4 +259,4 @@ with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
 with open(TIKTOK_SEEN_IDS_FILE, "w", encoding="utf-8") as f:
     json.dump(seen_ids, f, indent=4)
 
-print(f"🎉 Successfully Generated Viral TikTok Videos ({total_count} total unique)!")
+print(f"🎉 Successfully Generated Viral TikTok Videos with 50M+ likes ({total_count} total unique)!")
