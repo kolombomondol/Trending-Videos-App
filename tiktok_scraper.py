@@ -11,8 +11,8 @@ now = datetime.now(timezone.utc)
 
 RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
 
-# শুধু এই সংখ্যার বেশি লাইক পাওয়া ভিডিও রাখা হবে
-MIN_LIKES = 5_000_000
+# 🎯 ফিল্টার: অন্তত ১০,০০০ (10k) লাইক বা তার বেশি ভিডিও নেওয়া ভালো (প্রয়োজন অনুযায়ী পরিবর্তন করতে পারেন)
+MIN_LIKES = 2_000_000
 
 # ১. আগের জমানো ভিডিও আইডি লোড
 seen_ids = {}
@@ -79,7 +79,7 @@ def normalize_video(item, country_name, country_code, source):
     else:
         author_name = str(author_field or item.get("author", "TikTok Creator"))
 
-    # লাইক কাউন্ট বের করা (tikwm: digg_count, অন্য সোর্স: likeCount)
+    # 📌 TikWM থেকে আসা 'digg_count' সঠিক নিয়মে লাইক কাউন্টে কনভার্ট করা
     like_count = item.get("digg_count", item.get("likeCount", 0))
     try:
         like_count = int(like_count)
@@ -99,7 +99,7 @@ def normalize_video(item, country_name, country_code, source):
         "playUrl": play_url,
         "thumbnailUrl": thumbnail_url,
         "viewCount": str(item.get("play_count", item.get("viewCount", 0))),
-        "likeCount": like_count,
+        "likeCount": like_count,  # 👈 এখন JSON-এ 'likeCount' ফিল্ডটি তৈরি হবে!
         "country": country_name,
         "countryCode": country_code,
         "publishedAt": now.isoformat(),
@@ -108,18 +108,13 @@ def normalize_video(item, country_name, country_code, source):
     }
 
 
-# -------------------------------------------------------------------
-# 🥇 প্রাইমারি সোর্স: tikwm.com
-# -------------------------------------------------------------------
-
-def fetch_from_tikwm(country_code, country_name, max_retries=5):
+def fetch_from_tikwm(country_code, country_name, max_retries=3):
     url = "https://www.tikwm.com/api/feed/list"
     params = {"region": country_code, "count": 30}
 
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
-            # প্রতি চেষ্টায় একটু বেশি সময় দেওয়া হচ্ছে, যাতে সার্ভার busy থাকলেও সুযোগ পায়
             timeout = 8 + (attempt * 3)
             response = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
             response.raise_for_status()
@@ -129,7 +124,7 @@ def fetch_from_tikwm(country_code, country_name, max_retries=5):
             if not items:
                 last_error = "empty response"
                 if attempt < max_retries:
-                    time.sleep(2)
+                    time.sleep(1)
                 continue
 
             videos = []
@@ -138,31 +133,24 @@ def fetch_from_tikwm(country_code, country_name, max_retries=5):
                 video = normalize_video(item, country_name, country_code, source="tikwm")
                 if not video or video["id"] in added_ids:
                     continue
-                # শুধু MIN_LIKES এর বেশি লাইক পাওয়া ভিডিও রাখা হচ্ছে
+                
+                # লাইক ফিল্টারিং (খুব বেশি কড়া ফিল্টার না রাখা ভালো)
                 if video["likeCount"] < MIN_LIKES:
                     continue
+
                 added_ids.add(video["id"])
                 videos.append(video)
-
-            if attempt > 1:
-                print(f"  🔁 tikwm succeeded for {country_name} on attempt {attempt}")
 
             return videos
 
         except Exception as e:
             last_error = e
             if attempt < max_retries:
-                time.sleep(2)  # পরের চেষ্টার আগে একটু বিরতি
+                time.sleep(1)
             continue
 
-    # সব চেষ্টা ব্যর্থ হলে
-    raise Exception(f"failed after {max_retries} attempts, last error: {last_error}")
+    raise Exception(f"Failed after {max_retries} attempts: {last_error}")
 
-
-# -------------------------------------------------------------------
-# 🥈 ফলব্যাক সোর্স: RapidAPI-এর একটা TikTok wrapper
-# (নিজের RapidAPI অ্যাকাউন্ট থেকে TikTok API সাবস্ক্রাইব করে key বসাতে হবে)
-# -------------------------------------------------------------------
 
 def fetch_from_rapidapi(country_code, country_name):
     if not RAPIDAPI_KEY:
@@ -186,18 +174,15 @@ def fetch_from_rapidapi(country_code, country_name):
         video = normalize_video(item, country_name, country_code, source="rapidapi")
         if not video or video["id"] in added_ids:
             continue
-        # শুধু MIN_LIKES এর বেশি লাইক পাওয়া ভিডিও রাখা হচ্ছে
+            
         if video["likeCount"] < MIN_LIKES:
             continue
+            
         added_ids.add(video["id"])
         videos.append(video)
 
     return videos
 
-
-# -------------------------------------------------------------------
-# মূল লজিক: tikwm ট্রাই করো, ব্যর্থ/খালি হলে RapidAPI ফলব্যাক ট্রাই করো
-# -------------------------------------------------------------------
 
 def fetch_country_videos(country_code, country_name):
     try:
@@ -213,38 +198,36 @@ def fetch_country_videos(country_code, country_name):
             print(f"  🔁 Fallback (RapidAPI) succeeded for {country_name}")
             return videos, "rapidapi"
     except Exception as e:
-        print(f"  ⏩ RapidAPI fallback also failed for {country_name}: {e}")
+        print(f"  ⏩ RapidAPI fallback failed for {country_name}: {e}")
 
     return [], None
 
 
 def fetch_worldwide_viral_videos():
-    print(f"🚀 Fetching Viral Videos (50M+ likes) for {len(COUNTRIES)} Countries...")
-    if not RAPIDAPI_KEY:
-        print("ℹ️ No RAPIDAPI_KEY set — running with tikwm only, no fallback available.")
+    print(f"🚀 Fetching Viral Videos for {len(COUNTRIES)} Countries...")
 
     country_videos_map = {}
     all_global_videos = []
     added_global_ids = set()
 
     for code, country_name in COUNTRIES.items():
-        print(f"🌍 Fetching videos for: {country_name} ({code})...")
+        print(f"🌍 Fetching: {country_name} ({code})...")
         videos, used_source = fetch_country_videos(code, country_name)
 
         if videos:
             country_videos_map[code] = videos
-            print(f"✅ Saved {len(videos)} videos (50M+ likes) for {country_name} (source: {used_source})")
+            print(f"✅ Saved {len(videos)} videos for {country_name} ({used_source})")
 
             for v in videos:
                 if v["id"] not in added_global_ids:
                     added_global_ids.add(v["id"])
                     all_global_videos.append(v)
         else:
-            print(f"❌ 0 videos with 50M+ likes found for {country_name}")
+            print(f"❌ 0 videos found for {country_name}")
 
-        time.sleep(0.5)  # rate-limit এড়াতে একটু বিরতি
+        time.sleep(0.3)
 
-    # ভিউ/লাইক অনুযায়ী সাজিয়ে গ্লোবাল লিস্ট তৈরি
+    # লাইক অনুযায়ী সাজিয়ে গ্লোবাল লিস্ট তৈরি
     all_global_videos.sort(key=lambda v: v["likeCount"], reverse=True)
     country_videos_map["GLOBAL"] = all_global_videos[:600]
 
@@ -259,4 +242,4 @@ with open(TIKTOK_VIDEOS_FILE, "w", encoding="utf-8") as f:
 with open(TIKTOK_SEEN_IDS_FILE, "w", encoding="utf-8") as f:
     json.dump(seen_ids, f, indent=4)
 
-print(f"🎉 Successfully Generated Viral TikTok Videos with 50M+ likes ({total_count} total unique)!")
+print(f"\n🎉 Generated {total_count} unique videos with 'likeCount' included!")
